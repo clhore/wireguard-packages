@@ -38,7 +38,8 @@ type WireGuardTrun struct {
 	cfg           wgtypes.Config
 }
 
-func NewWireGuardTrun(options ...func(*WireGuardTrun)) *WireGuardTrun {
+func NewWireGuardTrun(options ...func(*WireGuardTrun)) (*WireGuardTrun, error) {
+	var err error
 	wg := &WireGuardTrun{
 		InterfaceName: "wg0",
 		ListenPort:    51820,
@@ -50,11 +51,20 @@ func NewWireGuardTrun(options ...func(*WireGuardTrun)) *WireGuardTrun {
 		opt(wg)
 	}
 
-	if wg.PrivateKey == "" {
-		wg.PrivateKey = wgkeys.GeneratePrivateKey()
+	//if wg.PrivateKey == "" {
+	//	if wg.PrivateKey, err = wgkeys.GeneratePrivateKey(); err != nil {
+	//		return nil, err
+	//	}
+	//}
+
+	if wg.PrivateKey == "" && func() bool {
+		wg.PrivateKey, err = wgkeys.GeneratePrivateKey()
+		return err != nil
+	}() {
+		return nil, err
 	}
 
-	return wg
+	return wg, nil
 }
 
 func WithInterfaceName(ifaceName string) func(*WireGuardTrun) {
@@ -81,6 +91,10 @@ func WithInterfaceIp(address IPAddrAndMac) func(*WireGuardTrun) {
 	}
 }
 
+func (wg *WireGuardTrun) getPublicKey() (string, error) {
+	return wgkeys.GeneratePublicKey(wg.PrivateKey)
+}
+
 func (wg *WireGuardTrun) CreateInterface() error {
 	if _, err := wg.SearchInterface(); err == nil {
 		fmt.Printf("Interface %s does exist\n", wg.InterfaceName)
@@ -95,22 +109,21 @@ func (wg *WireGuardTrun) CreateInterface() error {
 	}
 
 	if err := netlink.LinkAdd(ifaceConf); err != nil {
-		return fmt.Errorf("Error create interface %s: %w", wg.InterfaceName, err)
+		return fmt.Errorf("error create interface %s: %w", wg.InterfaceName, err)
 	}
 
-	// Levantar la interfaz
 	if err := netlink.LinkSetUp(ifaceConf); err != nil {
-		return fmt.Errorf("Error UP interface %s: %w", wg.InterfaceName, err)
+		return fmt.Errorf("error UP interface %s: %w", wg.InterfaceName, err)
 	}
 	fmt.Printf("UP interface %s\n", wg.InterfaceName)
 
 	if err := wg.SetInterfaceWgTrun(); err != nil {
-		return fmt.Errorf("Error setup interface %s: %w", wg.InterfaceName, err)
+		return fmt.Errorf("error setup interface %s: %w", wg.InterfaceName, err)
 	}
 
 	ipAddr, err := wg.SetInterfaceIP()
 	if err != nil {
-		return fmt.Errorf("Error set IP %s to interface %s: %w", ipAddr, wg.InterfaceName, err)
+		return fmt.Errorf("error set IP %s to interface %s: %w", ipAddr, wg.InterfaceName, err)
 	}
 	fmt.Printf("Set IP %s to interface %s\n", ipAddr, wg.InterfaceName)
 
@@ -122,7 +135,7 @@ func (wg *WireGuardTrun) CreateInterface() error {
 func (wg *WireGuardTrun) SearchInterface() (netlink.Link, error) {
 	iface, err := netlink.LinkByName(wg.InterfaceName)
 	if err != nil {
-		return iface, fmt.Errorf("Interface %s does not exist: %w", wg.InterfaceName, err)
+		return iface, fmt.Errorf("interface %s does not exist: %w", wg.InterfaceName, err)
 	}
 	return iface, nil
 }
@@ -137,11 +150,11 @@ func (wg *WireGuardTrun) SetInterfaceIP() (string, error) {
 
 	addr, err := netlink.ParseAddr(ipAddr)
 	if err != nil {
-		return ipAddr, fmt.Errorf("Error parse addr %s: %w", ipAddr, err)
+		return ipAddr, fmt.Errorf("error parse addr %s: %w", ipAddr, err)
 	}
 
 	if err := netlink.AddrAdd(iface, addr); err != nil {
-		return ipAddr, fmt.Errorf("Error add addr %s to interface %s: %w", ipAddr, wg.InterfaceName, err)
+		return ipAddr, fmt.Errorf("error add addr %s to interface %s: %w", ipAddr, wg.InterfaceName, err)
 	}
 
 	return ipAddr, nil
@@ -194,7 +207,7 @@ func (wg *WireGuardTrun) UpdateConfigInterfaceWgTrun() error {
 func (wg *WireGuardTrun) AddPeer(peer Peer) error {
 	peerKey, err := wgtypes.ParseKey(peer.PublicKey)
 	if err != nil {
-		return fmt.Errorf("Error parseando la clave pública del peer: %w", err)
+		return fmt.Errorf("error parseando la clave pública del peer: %w", err)
 	}
 
 	var allowedIPs []net.IPNet
@@ -226,7 +239,7 @@ func (wg *WireGuardTrun) AddPeer(peer Peer) error {
 func (wg *WireGuardTrun) RemovePeer(peerPublicKey string) error {
 	peerKey, err := wgtypes.ParseKey(peerPublicKey)
 	if err != nil {
-		return fmt.Errorf("Error parseando la clave pública del peer: %w", err)
+		return fmt.Errorf("error parse public key")
 	}
 
 	for i, peer := range wg.cfg.Peers {
@@ -236,7 +249,7 @@ func (wg *WireGuardTrun) RemovePeer(peerPublicKey string) error {
 		}
 	}
 
-	return fmt.Errorf("Peer con clave pública %s no encontrado", peerPublicKey)
+	return fmt.Errorf("error search peer %s", peerPublicKey)
 }
 
 func (wg *WireGuardTrun) ListPeers() ([]string, error) {
@@ -262,13 +275,11 @@ func (wg *WireGuardTrun) ListPeers() ([]string, error) {
 func (wg *WireGuardTrun) DeleteInterface() error {
 	iface, err := wg.SearchInterface()
 	if err != nil {
-		return fmt.Errorf("Error buscando la interfaz %s: %w", wg.InterfaceName, err)
+		return fmt.Errorf("error search interface")
 	}
 
 	if err := netlink.LinkDel(iface); err != nil {
-		return fmt.Errorf("Error eliminando la interfaz %s: %w", wg.InterfaceName, err)
+		return fmt.Errorf("error delete interface %s", wg.InterfaceName)
 	}
-
-	fmt.Printf("Interfaz %s eliminada\n", wg.InterfaceName)
 	return nil
 }

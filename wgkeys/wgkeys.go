@@ -3,23 +3,24 @@ package wgkeys
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 )
 
-func GeneratePrivateKey() string {
+func GeneratePrivateKey() (string, error) {
 	key := make([]byte, 32)
 	_, err := rand.Read(key)
 	if err != nil {
-		panic("Error generando la clave privada")
+		return "", fmt.Errorf("error generate the private key")
 	}
-	return base64.StdEncoding.EncodeToString(key)
+	return base64.StdEncoding.EncodeToString(key), nil
 }
 
-func GeneratePublicKey(privateKey string) string {
+func GeneratePublicKey(privateKey string) (string, error) {
 	key, err := base64.StdEncoding.DecodeString(privateKey)
 	if err != nil {
-		panic("Error decodificando la clave privada")
+		return "", fmt.Errorf("error decoding the private key")
 	}
 	publicKey := make([]byte, 32)
 	copy(publicKey, key[:32])
-	return base64.StdEncoding.EncodeToString(publicKey)
+	return base64.StdEncoding.EncodeToString(publicKey), nil
 }
