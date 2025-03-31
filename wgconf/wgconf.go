@@ -51,12 +51,6 @@ func NewWireGuardTrun(options ...func(*WireGuardTrun)) (*WireGuardTrun, error) {
 		opt(wg)
 	}
 
-	//if wg.PrivateKey == "" {
-	//	if wg.PrivateKey, err = wgkeys.GeneratePrivateKey(); err != nil {
-	//		return nil, err
-	//	}
-	//}
-
 	if wg.PrivateKey == "" && func() bool {
 		wg.PrivateKey, err = wgkeys.GeneratePrivateKey()
 		return err != nil
