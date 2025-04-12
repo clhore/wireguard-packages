@@ -206,16 +206,18 @@ func (wg *WireGuardTrun) AddPeer(peer Peer) error {
 		allowedIPs = append(allowedIPs, *ipnet)
 	}
 
-	endpoint := &net.UDPAddr{
-		IP:   net.ParseIP(peer.Endpoint.Host),
-		Port: peer.Endpoint.Port,
-	}
-
 	newPeer := wgtypes.PeerConfig{
 		PublicKey:                   peerKey,
-		Endpoint:                    endpoint,
 		AllowedIPs:                  allowedIPs,
 		PersistentKeepaliveInterval: func() *time.Duration { d := time.Duration(peer.KeepAlive) * time.Second; return &d }(),
+	}
+
+	if peer.Endpoint.Host != "" && peer.Endpoint.Port != 0 {
+		endpoint := &net.UDPAddr{
+			IP:   net.ParseIP(peer.Endpoint.Host),
+			Port: peer.Endpoint.Port,
+		}
+		newPeer.Endpoint = endpoint
 	}
 
 	wg.cfg.Peers = append(wg.cfg.Peers, newPeer)
